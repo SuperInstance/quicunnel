@@ -1,0 +1,57 @@
+[workspace]
+
+[package]
+name = "quicunnel"
+version = "0.1.0"
+edition = "2021"
+authors = ["SuperInstance AI"]
+description = "High-performance QUIC tunnel with mTLS authentication and automatic reconnection"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/SuperInstance/quicunnel"
+readme = "README.md"
+keywords = ["quic", "tunnel", "networking", "mtls", "performance"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+time = "0.3"
+
+# QUIC/TLS
+quinn = "0.10"
+rustls = { version = "0.21", features = ["dangerous_configuration"] }
+rustls-pemfile = "1.0"
+webpki-roots = "0.25"
+rcgen = "0.11"
+
+# For data structures
+bytes = "1.5"
+
+# For URL parsing
+url = "2.5"
+
+[dev-dependencies]
+tokio-test = "0.4"
+criterion = "0.5"
+
+[lib]
+name = "quicunnel"
+path = "src/lib.rs"
+
+# Benchmarks
+[[bench]]
+name = "tunnel"
+harness = false

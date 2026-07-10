@@ -28,7 +28,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Convert to PEM format for use with QUIC tunnel
     println!("\nTo use with quicunnel:");
-    println!("1. Convert cert to PEM: openssl x509 -in {}.crt -out {}.pem -outform PEM", client_id, client_id);
+    println!(
+        "1. Convert cert to PEM: openssl x509 -in {}.crt -out {}.pem -outform PEM",
+        client_id, client_id
+    );
     println!("2. Convert key to PEM: openssl pkcs8 -topk8 -inform DER -in {}.key -out {}.pem -outform PEM -nocrypt", client_id, client_id);
     println!("3. Update TunnelConfig to use the .pem files");
 

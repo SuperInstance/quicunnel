@@ -37,5 +37,9 @@ fn benchmark_stats_accumulation(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, benchmark_state_transitions, benchmark_stats_accumulation);
+criterion_group!(
+    benches,
+    benchmark_state_transitions,
+    benchmark_stats_accumulation
+);
 criterion_main!(benches);

@@ -5,9 +5,9 @@
 
 pub use crate::types::{TunnelConfig, TunnelState, TunnelStats};
 
+use super::endpoint::{connect_to_cloud, create_endpoint};
+use super::heartbeat::{HeartbeatConfig, HeartbeatService};
 use super::state::ConnectionStateMachine;
-use super::heartbeat::{HeartbeatService, HeartbeatConfig};
-use super::endpoint::{create_endpoint, connect_to_cloud};
 use crate::error::{QuicunnelError, Result};
 use std::sync::Arc;
 use std::time::Instant;
@@ -119,11 +119,8 @@ impl Tunnel {
         let server_url = self.config.server_url.clone();
         let server_name = extract_server_name(&server_url)?;
 
-        let conn = connect_to_cloud(
-            self.endpoint.as_ref().unwrap(),
-            &server_url,
-            &server_name,
-        ).await?;
+        let conn =
+            connect_to_cloud(self.endpoint.as_ref().unwrap(), &server_url, &server_name).await?;
 
         // Store connection
         *self.connection.write().await = Some(conn.clone());
@@ -204,36 +201,39 @@ impl Tunnel {
     /// ```
     pub async fn request(&self, data: &[u8]) -> Result<Vec<u8>> {
         // Get connection (clone to avoid holding lock across await)
-        let conn = self.connection.read().await
+        let conn = self
+            .connection
+            .read()
+            .await
             .as_ref()
             .ok_or_else(|| {
-                QuicunnelError::tunnel_connection(
-                    "Tunnel not connected. Call connect() first."
-                )
+                QuicunnelError::tunnel_connection("Tunnel not connected. Call connect() first.")
             })?
             .clone();
 
         // Open bidirectional stream
-        let (mut send, mut recv) = conn.open_bi().await
-            .map_err(|e| QuicunnelError::tunnel_connection(format!(
-                "Failed to open QUIC bidirectional stream: {}", e
-            )))?;
+        let (mut send, mut recv) = conn.open_bi().await.map_err(|e| {
+            QuicunnelError::tunnel_connection(format!(
+                "Failed to open QUIC bidirectional stream: {}",
+                e
+            ))
+        })?;
 
         // Send request data
-        send.write_all(data).await
-            .map_err(|e| QuicunnelError::tunnel_connection(format!(
-                "Failed to send request data: {}", e
-            )))?;
-        send.finish()
-            .map_err(|e| QuicunnelError::tunnel_connection(format!(
-                "Failed to finish sending: {}", e
-            )))?;
+        send.write_all(data).await.map_err(|e| {
+            QuicunnelError::tunnel_connection(format!("Failed to send request data: {}", e))
+        })?;
+        send.finish().map_err(|e| {
+            QuicunnelError::tunnel_connection(format!("Failed to finish sending: {}", e))
+        })?;
 
         // Receive response (with size limit to prevent memory exhaustion)
-        let response = recv.read_to_end(self.config.max_response_size).await
-            .map_err(|e| QuicunnelError::tunnel_connection(format!(
-                "Failed to read response: {}", e
-            )))?;
+        let response = recv
+            .read_to_end(self.config.max_response_size)
+            .await
+            .map_err(|e| {
+                QuicunnelError::tunnel_connection(format!("Failed to read response: {}", e))
+            })?;
 
         // Update statistics (bytes sent/received, request count)
         let mut stats = self.stats.write().await;
@@ -256,24 +256,27 @@ impl Tunnel {
     /// # async fn example(tunnel: &Tunnel) -> Result<(), Box<dyn std::error::Error>> {
     /// let mut send_stream = tunnel.open_uni().await?;
     /// send_stream.write_all(b"streaming data").await?;
-    /// send_stream.finish().await?;
+    /// send_stream.finish()?;
     /// # Ok(())
     /// # }
     /// ```
     pub async fn open_uni(&self) -> Result<quinn::SendStream> {
-        let conn = self.connection.read().await
+        let conn = self
+            .connection
+            .read()
+            .await
             .as_ref()
             .ok_or_else(|| {
-                QuicunnelError::tunnel_connection(
-                    "Tunnel not connected. Call connect() first."
-                )
+                QuicunnelError::tunnel_connection("Tunnel not connected. Call connect() first.")
             })?
             .clone();
 
-        conn.open_uni().await
-            .map_err(|e| QuicunnelError::tunnel_connection(format!(
-                "Failed to open unidirectional stream: {}", e
-            )))
+        conn.open_uni().await.map_err(|e| {
+            QuicunnelError::tunnel_connection(format!(
+                "Failed to open unidirectional stream: {}",
+                e
+            ))
+        })
     }
 }
 
@@ -282,7 +285,8 @@ fn extract_server_name(url: &str) -> Result<String> {
     let parsed = url::Url::parse(url)
         .map_err(|e| QuicunnelError::validation(format!("Invalid URL: {}", e)))?;
 
-    parsed.host_str()
+    parsed
+        .host_str()
         .map(|s| s.to_string())
         .ok_or_else(|| QuicunnelError::validation("No host in URL"))
 }
@@ -324,7 +328,7 @@ mod tests {
     fn test_tunnel_validation() {
         let config = TunnelConfig {
             cert_path: PathBuf::new(), // Empty
-            key_path: PathBuf::new(), // Empty
+            key_path: PathBuf::new(),  // Empty
             ..Default::default()
         };
 

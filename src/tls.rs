@@ -31,27 +31,21 @@ use std::sync::Arc;
 ///     Path::new("/path/to/key.pem")
 /// ).unwrap();
 /// ```
-pub fn create_tls_config(
-    cert_path: &Path,
-    key_path: &Path,
-) -> Result<Arc<ClientConfig>> {
+pub fn create_tls_config(cert_path: &Path, key_path: &Path) -> Result<Arc<ClientConfig>> {
     // Load client certificate
     let cert_file = File::open(cert_path).map_err(|e| {
         QuicunnelError::certificate(format!("Failed to open certificate file: {}", e))
     })?;
     let mut cert_reader = BufReader::new(cert_file);
-    let cert_vec = certs(&mut cert_reader).map_err(|e| {
-        QuicunnelError::certificate(format!("Failed to parse certificate: {}", e))
-    })?;
+    let cert_vec = certs(&mut cert_reader)
+        .map_err(|e| QuicunnelError::certificate(format!("Failed to parse certificate: {}", e)))?;
 
     if cert_vec.is_empty() {
         return Err(QuicunnelError::certificate("No certificates found in file"));
     }
 
-    let client_certs: Vec<CertificateDer<'static>> = cert_vec
-        .into_iter()
-        .map(CertificateDer::from)
-        .collect();
+    let client_certs: Vec<CertificateDer<'static>> =
+        cert_vec.into_iter().map(CertificateDer::from).collect();
 
     // Load client private key. PEM markers determine the key encoding, so try
     // each parser in turn (RSA PKCS#1, EC SEC1, then PKCS#8).
@@ -153,12 +147,13 @@ pub fn generate_device_certificate(
     // Extended key usage for client auth
     params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
 
-    let cert = RcgenCert::from_params(params)
-        .map_err(|e| QuicunnelError::certificate(format!("Failed to generate certificate: {}", e)))?;
+    let cert = RcgenCert::from_params(params).map_err(|e| {
+        QuicunnelError::certificate(format!("Failed to generate certificate: {}", e))
+    })?;
 
-    let cert_der = cert
-        .serialize_der()
-        .map_err(|e| QuicunnelError::certificate(format!("Failed to serialize certificate: {}", e)))?;
+    let cert_der = cert.serialize_der().map_err(|e| {
+        QuicunnelError::certificate(format!("Failed to serialize certificate: {}", e))
+    })?;
     let key_der = cert.serialize_private_key_der();
 
     let key = PrivateKeyDer::try_from(key_der)

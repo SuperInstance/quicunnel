@@ -56,19 +56,19 @@
 //!
 //! MIT OR Apache-2.0
 
-pub mod error;
-pub mod tls;
 pub mod endpoint;
-pub mod types;
-pub mod state;
+pub mod error;
 pub mod heartbeat;
 pub mod reconnect;
+pub mod state;
+pub mod tls;
 pub mod tunnel;
+pub mod types;
 
 pub use error::{QuicunnelError, Result};
-pub use tls::{create_tls_config, generate_device_certificate};
-pub use types::{TunnelConfig, TunnelState, TunnelStats};
-pub use tunnel::Tunnel;
+pub use heartbeat::{HeartbeatConfig, HeartbeatService};
+pub use reconnect::{ReconnectConfig, ReconnectManager};
 pub use state::ConnectionStateMachine;
-pub use heartbeat::{HeartbeatService, HeartbeatConfig};
-pub use reconnect::{ReconnectManager, ReconnectConfig};
+pub use tls::{create_tls_config, generate_device_certificate};
+pub use tunnel::Tunnel;
+pub use types::{TunnelConfig, TunnelState, TunnelStats};

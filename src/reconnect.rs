@@ -76,7 +76,7 @@ impl ReconnectManager {
         // Exponential backoff
         self.current_delay = std::cmp::min(
             Duration::from_secs_f32(
-                self.current_delay.as_secs_f32() * self.config.backoff_multiplier
+                self.current_delay.as_secs_f32() * self.config.backoff_multiplier,
             ),
             self.config.max_delay,
         );

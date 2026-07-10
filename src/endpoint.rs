@@ -2,7 +2,7 @@
 
 use crate::error::{QuicunnelError, Result};
 use crate::tls::create_tls_config;
-use quinn::{Endpoint, Connection};
+use quinn::{Connection, Endpoint};
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
@@ -27,18 +27,18 @@ use std::time::Duration;
 ///     std::path::Path::new("/path/to/key.pem")
 /// ).unwrap();
 /// ```
-pub fn create_endpoint(
-    cert_path: &Path,
-    key_path: &Path,
-) -> Result<Endpoint> {
+pub fn create_endpoint(cert_path: &Path, key_path: &Path) -> Result<Endpoint> {
     // Create TLS config
     let tls_config = create_tls_config(cert_path, key_path)?;
 
     // Configure QUIC transport
     let mut transport = quinn::TransportConfig::default();
     transport.keep_alive_interval(Some(Duration::from_secs(10)));
-    transport.max_idle_timeout(Some(Duration::from_secs(60).try_into()
-        .map_err(|e| QuicunnelError::other(format!("Invalid duration: {}", e)))?));
+    transport.max_idle_timeout(Some(
+        Duration::from_secs(60)
+            .try_into()
+            .map_err(|e| QuicunnelError::other(format!("Invalid duration: {}", e)))?,
+    ));
 
     // Build QUIC client config. quinn 0.11 requires a crypto provider config
     // wrapping the rustls ClientConfig.
@@ -48,10 +48,12 @@ pub fn create_endpoint(
     client_config.transport_config(Arc::new(transport));
 
     // Bind to random local port
-    let bind_addr: SocketAddr = "0.0.0.0:0".parse()
+    let bind_addr: SocketAddr = "0.0.0.0:0"
+        .parse()
         .map_err(|e| QuicunnelError::other(format!("Invalid bind address: {}", e)))?;
-    let mut endpoint = Endpoint::client(bind_addr)
-        .map_err(|e| QuicunnelError::tunnel_connection(format!("Failed to create endpoint: {}", e)))?;
+    let mut endpoint = Endpoint::client(bind_addr).map_err(|e| {
+        QuicunnelError::tunnel_connection(format!("Failed to create endpoint: {}", e))
+    })?;
     endpoint.set_default_client_config(client_config);
 
     Ok(endpoint)
@@ -118,7 +120,8 @@ async fn resolve_dns(url: &str) -> Result<SocketAddr> {
     let parsed = url::Url::parse(url)
         .map_err(|e| QuicunnelError::tunnel_connection(format!("Invalid URL: {}", e)))?;
 
-    let host = parsed.host_str()
+    let host = parsed
+        .host_str()
         .ok_or_else(|| QuicunnelError::tunnel_connection("No host in URL"))?;
 
     let port = parsed.port().unwrap_or(443);
@@ -143,9 +146,7 @@ mod tests {
     fn test_resolve_dns() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
 
-        let result = runtime.block_on(async {
-            resolve_dns("https://example.com:443").await
-        });
+        let result = runtime.block_on(async { resolve_dns("https://example.com:443").await });
 
         // Should resolve example.com
         assert!(result.is_ok());
@@ -157,9 +158,7 @@ mod tests {
     fn test_invalid_url() {
         let runtime = tokio::runtime::Runtime::new().unwrap();
 
-        let result = runtime.block_on(async {
-            resolve_dns("not-a-url").await
-        });
+        let result = runtime.block_on(async { resolve_dns("not-a-url").await });
 
         assert!(result.is_err());
     }

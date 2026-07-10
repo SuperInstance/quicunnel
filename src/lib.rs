@@ -1,16 +1,31 @@
-//! # Quicunnel - High-Performance QUIC Tunnel
+//! # quicunnel
 //!
-//! A production-ready QUIC tunnel library with mTLS authentication,
-//! automatic reconnection, and high-performance throughput.
+//! A **client-side** QUIC tunnel library built on [quinn] and [rustls], with
+//! mutual-TLS client authentication, a validated connection-state machine, and
+//! a heartbeat sender. This is a library, not a server. See the crate README
+//! for a full and honest status of what works today versus what is stubbed.
 //!
-//! ## Features
+//! ## What works
 //!
-//! - **QUIC Protocol**: Built on Quinn for high-performance UDP-based transport
-//! - **mTLS Authentication**: Mutual TLS with certificate validation
-//! - **Automatic Reconnection**: Exponential backoff and retry logic
-//! - **Heartbeat System**: Keep-alive mechanism with failure detection
-//! - **Stream Multiplexing**: Multiple streams over single connection
-//! - **Connection State Machine**: Robust state management
+//! - **mTLS client config** (`create_tls_config`) and **dev cert generation**
+//!   (`generate_device_certificate`): rustls 0.23, webpki system roots.
+//! - **Endpoint + connect** (`create_endpoint`, `connect_to_cloud`).
+//! - **Request/response** over a bidirectional stream (`Tunnel::request`) and
+//!   **fire-and-forget sends** (`Tunnel::open_uni`).
+//! - **Connection state machine** with rejected illegal transitions
+//!   (`ConnectionStateMachine`).
+//! - **Heartbeat sender** that emits keep-alives on a uni stream
+//!   (`HeartbeatService`).
+//!
+//! ## Not yet wired in
+//!
+//! - **Automatic reconnection**: `ReconnectManager` exists and is unit-tested,
+//!   but `Tunnel` does not drive it; call `connect()` again yourself on drop.
+//! - **Heartbeat ack/timeout**: `HeartbeatConfig::timeout` is accepted but
+//!   unused; heartbeats are one-way.
+//!
+//! [quinn]: https://github.com/quinn-rs/quinn
+//! [rustls]: https://github.com/rustls/rustls
 //!
 //! ## Quick Start
 //!
@@ -37,20 +52,6 @@
 //!     Ok(())
 //! }
 //! ```
-//!
-//! ## Performance
-//!
-//! - **Connection establishment**: 1-3 seconds (mTLS handshake)
-//! - **Throughput**: > 1 Gbps on modern networks
-//! - **Latency**: < 1ms overhead over raw QUIC
-//! - **Memory**: ~10 MB per connection
-//!
-//! ## Security
-//!
-//! - TLS 1.3 with mTLS (mutual authentication)
-//! - Certificate validation against system roots
-//! - Secure handshake with perfect forward secrecy
-//! - Configurable cipher suites
 //!
 //! ## License
 //!

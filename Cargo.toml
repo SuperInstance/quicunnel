@@ -32,9 +32,9 @@ time = "0.3"
 
 # QUIC/TLS
 quinn = "0.11"
-rustls = { version = "0.23", features = ["dangerous_configuration"] }
+rustls = "0.23"
 rustls-pemfile = "1.0"
-webpki-roots = "0.25"
+webpki-roots = "0.26"
 rcgen = "0.11"
 
 # For data structures
@@ -46,6 +46,7 @@ url = "2.5"
 [dev-dependencies]
 tokio-test = "0.4"
 criterion = "0.5"
+tracing-subscriber = "0.3"
 
 [lib]
 name = "quicunnel"

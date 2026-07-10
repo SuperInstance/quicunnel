@@ -40,8 +40,11 @@ pub fn create_endpoint(
     transport.max_idle_timeout(Some(Duration::from_secs(60).try_into()
         .map_err(|e| QuicunnelError::other(format!("Invalid duration: {}", e)))?));
 
-    // Build QUIC client config
-    let mut client_config = quinn::ClientConfig::new(tls_config);
+    // Build QUIC client config. quinn 0.11 requires a crypto provider config
+    // wrapping the rustls ClientConfig.
+    let crypto = quinn::crypto::rustls::QuicClientConfig::try_from(tls_config)
+        .map_err(|e| QuicunnelError::tls(format!("Failed to build QUIC TLS config: {}", e)))?;
+    let mut client_config = quinn::ClientConfig::new(Arc::new(crypto));
     client_config.transport_config(Arc::new(transport));
 
     // Bind to random local port

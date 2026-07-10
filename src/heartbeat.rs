@@ -131,7 +131,7 @@ impl HeartbeatService {
         send.write_all(&data).await
             .map_err(|e| crate::error::QuicunnelError::tunnel_connection(format!("Failed to write payload: {}", e)))?;
 
-        send.finish().await
+        send.finish()
             .map_err(|e| crate::error::QuicunnelError::tunnel_connection(format!("Failed to finish stream: {}", e)))?;
 
         tracing::trace!("Heartbeat sent: seq={}", sequence);

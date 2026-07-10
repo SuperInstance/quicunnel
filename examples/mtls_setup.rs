@@ -17,13 +17,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Save certificate
     let cert_path = PathBuf::from(format!("{}.crt", client_id));
     let mut cert_file = File::create(&cert_path)?;
-    cert_file.write_all(&cert.0)?;
+    cert_file.write_all(cert.as_ref())?;
     println!("Certificate saved to: {:?}", cert_path);
 
     // Save private key
     let key_path = PathBuf::from(format!("{}.key", client_id));
     let mut key_file = File::create(&key_path)?;
-    key_file.write_all(&key.0)?;
+    key_file.write_all(key.secret_der())?;
     println!("Private key saved to: {:?}", key_path);
 
     // Convert to PEM format for use with QUIC tunnel

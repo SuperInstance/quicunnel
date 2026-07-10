@@ -2,7 +2,7 @@
 //
 // Run with: cargo bench
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion};
 
 fn benchmark_state_transitions(c: &mut Criterion) {
     use quicunnel::state::ConnectionStateMachine;

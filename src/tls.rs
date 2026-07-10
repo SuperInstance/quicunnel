@@ -3,8 +3,9 @@
 //! This module provides TLS 1.3 configuration with mTLS support.
 
 use crate::error::{QuicunnelError, Result};
-use rustls::{Certificate, PrivateKey, ClientConfig, RootCertStore};
-use rustls_pemfile::{certs, rsa_private_keys, ec_private_keys, pkcs8_private_keys};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::{ClientConfig, RootCertStore};
+use rustls_pemfile::{certs, ec_private_keys, pkcs8_private_keys, rsa_private_keys};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
@@ -42,73 +43,64 @@ pub fn create_tls_config(
     let cert_vec = certs(&mut cert_reader).map_err(|e| {
         QuicunnelError::certificate(format!("Failed to parse certificate: {}", e))
     })?;
-    let certs = cert_vec.into_iter().map(Certificate).collect::<Vec<_>>();
 
-    if certs.is_empty() {
+    if cert_vec.is_empty() {
         return Err(QuicunnelError::certificate("No certificates found in file"));
     }
 
-    // Load client private key (try RSA, then EC, then PKCS8)
-    let key_file = File::open(key_path).map_err(|e| {
-        QuicunnelError::certificate(format!("Failed to open key file: {}", e))
-    })?;
-    let mut key_reader = BufReader::new(key_file);
+    let client_certs: Vec<CertificateDer<'static>> = cert_vec
+        .into_iter()
+        .map(CertificateDer::from)
+        .collect();
 
-    // Try RSA private keys first
-    let keys = rsa_private_keys(&mut key_reader).map_err(|e| {
-        QuicunnelError::certificate(format!("Failed to parse RSA key: {}", e))
-    })?;
+    // Load client private key. PEM markers determine the key encoding, so try
+    // each parser in turn (RSA PKCS#1, EC SEC1, then PKCS#8).
+    let key = load_private_key(key_path)?;
 
-    let key = if !keys.is_empty() {
-        keys[0].clone()
-    } else {
-        // Reset reader and try EC keys
-        key_reader = BufReader::new(File::open(key_path).map_err(|e| {
-            QuicunnelError::certificate(format!("Failed to reopen key file: {}", e))
-        })?);
-        let keys = ec_private_keys(&mut key_reader).map_err(|e| {
-            QuicunnelError::certificate(format!("Failed to parse EC key: {}", e))
-        })?;
-
-        if !keys.is_empty() {
-            keys[0].clone()
-        } else {
-            // Reset reader and try PKCS8 keys
-            key_reader = BufReader::new(File::open(key_path).map_err(|e| {
-                QuicunnelError::certificate(format!("Failed to reopen key file: {}", e))
-            })?);
-            let keys = pkcs8_private_keys(&mut key_reader).map_err(|e| {
-                QuicunnelError::certificate(format!("Failed to parse PKCS8 key: {}", e))
-            })?;
-
-            if !keys.is_empty() {
-                keys[0].clone()
-            } else {
-                return Err(QuicunnelError::certificate("No private key found in file"));
-            }
-        }
-    };
-
-    let key = PrivateKey(key);
-
-    // Build root certificate store with system CAs
+    // Build root certificate store from the Mozilla/webpki bundled roots.
     let mut roots = RootCertStore::empty();
-    roots.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
-        rustls::OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints.as_ref().map(|nc| *nc),
-        )
-    }));
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
     // Build client config with mTLS
     let config = ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(roots)
-        .with_client_auth_cert(certs, key)
+        .with_client_auth_cert(client_certs, key)
         .map_err(|e| QuicunnelError::tls(format!("Failed to build client config: {}", e)))?;
 
     Ok(Arc::new(config))
+}
+
+/// Read the first PEM private key from `key_path`, trying RSA, EC and PKCS#8.
+fn load_private_key(key_path: &Path) -> Result<PrivateKeyDer<'static>> {
+    let raw = read_first_key(key_path)?;
+    // `PrivateKeyDer::try_from` inspects the DER encoding to classify the key,
+    // so we can hand it the raw bytes regardless of which PEM section produced them.
+    PrivateKeyDer::try_from(raw)
+        .map_err(|e| QuicunnelError::certificate(format!("Failed to decode private key: {}", e)))
+}
+
+fn read_first_key(key_path: &Path) -> Result<Vec<u8>> {
+    let try_parse = |parse: fn(&mut dyn std::io::BufRead) -> std::io::Result<Vec<Vec<u8>>>| -> Result<Option<Vec<u8>>> {
+        let mut reader = BufReader::new(
+            File::open(key_path)
+                .map_err(|e| QuicunnelError::certificate(format!("Failed to open key file: {}", e)))?,
+        );
+        let keys = parse(&mut reader)
+            .map_err(|e| QuicunnelError::certificate(format!("Failed to parse key: {}", e)))?;
+        Ok(keys.into_iter().next())
+    };
+
+    if let Some(k) = try_parse(rsa_private_keys)? {
+        return Ok(k);
+    }
+    if let Some(k) = try_parse(ec_private_keys)? {
+        return Ok(k);
+    }
+    if let Some(k) = try_parse(pkcs8_private_keys)? {
+        return Ok(k);
+    }
+
+    Err(QuicunnelError::certificate("No private key found in file"))
 }
 
 /// Generate client certificate for testing
@@ -120,7 +112,7 @@ pub fn create_tls_config(
 /// * `client_id` - Unique client identifier
 ///
 /// # Returns
-/// * `(Certificate, PrivateKey)` pair for the client
+/// * `(CertificateDer, PrivateKeyDer)` pair (DER-encoded) for the client
 ///
 /// # Example
 ///
@@ -128,11 +120,12 @@ pub fn create_tls_config(
 /// use quicunnel::tls::generate_device_certificate;
 ///
 /// let (cert, key) = generate_device_certificate("client-123").unwrap();
-/// // Save cert and key to files for later use
+/// // `cert` / `key` deref to `&[u8]` (raw DER) and can be written to disk
+/// // or fed directly into rustls.
 /// ```
 pub fn generate_device_certificate(
     client_id: &str,
-) -> Result<(Certificate, PrivateKey)> {
+) -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>)> {
     use rcgen::{Certificate as RcgenCert, CertificateParams, DnType, KeyPair, SanType};
 
     // Generate key pair
@@ -141,29 +134,37 @@ pub fn generate_device_certificate(
 
     // Build certificate parameters
     let mut params = CertificateParams::default();
-    params.distinguished_name.push(DnType::CommonName, format!("client-{}", client_id));
-    params.distinguished_name.push(DnType::OrganizationName, "Quicunnel");
+    params
+        .distinguished_name
+        .push(DnType::CommonName, format!("client-{}", client_id));
+    params
+        .distinguished_name
+        .push(DnType::OrganizationName, "Quicunnel");
     params.not_before = time::OffsetDateTime::now_utc();
     params.not_after = time::OffsetDateTime::now_utc() + time::Duration::days(365);
     params.key_pair = Some(key_pair);
 
     // Subject alternative name (DNS name for client)
-    params.subject_alt_names = vec![SanType::DnsName(format!("{}.client.quicunnel.local", client_id))];
+    params.subject_alt_names = vec![SanType::DnsName(format!(
+        "{}.client.quicunnel.local",
+        client_id
+    ))];
 
     // Extended key usage for client auth
-    params.extended_key_usages = vec![
-        rcgen::ExtendedKeyUsagePurpose::ClientAuth,
-    ];
+    params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
 
     let cert = RcgenCert::from_params(params)
         .map_err(|e| QuicunnelError::certificate(format!("Failed to generate certificate: {}", e)))?;
 
-    // Convert to rustls types
-    let cert_der = cert.serialize_der()
+    let cert_der = cert
+        .serialize_der()
         .map_err(|e| QuicunnelError::certificate(format!("Failed to serialize certificate: {}", e)))?;
     let key_der = cert.serialize_private_key_der();
 
-    Ok((Certificate(cert_der), PrivateKey(key_der)))
+    let key = PrivateKeyDer::try_from(key_der)
+        .map_err(|e| QuicunnelError::certificate(format!("Failed to decode private key: {}", e)))?;
+
+    Ok((CertificateDer::from(cert_der), key))
 }
 
 #[cfg(test)]
@@ -175,9 +176,9 @@ mod tests {
         let client_id = "test-client-123";
         let (cert, key) = generate_device_certificate(client_id).unwrap();
 
-        // Verify we got a certificate and key
-        assert!(!cert.0.is_empty());
-        assert!(!key.0.is_empty());
+        // Verify we got a non-empty certificate and key (DER bytes).
+        assert!(!cert.as_ref().is_empty());
+        assert!(!key.secret_der().is_empty());
     }
 
     #[test]
@@ -189,7 +190,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            QuicunnelError::Certificate(_) => {},
+            QuicunnelError::Certificate(_) => {}
             _ => panic!("Expected Certificate error"),
         }
     }

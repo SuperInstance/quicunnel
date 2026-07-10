@@ -224,7 +224,7 @@ impl Tunnel {
             .map_err(|e| QuicunnelError::tunnel_connection(format!(
                 "Failed to send request data: {}", e
             )))?;
-        send.finish().await
+        send.finish()
             .map_err(|e| QuicunnelError::tunnel_connection(format!(
                 "Failed to finish sending: {}", e
             )))?;

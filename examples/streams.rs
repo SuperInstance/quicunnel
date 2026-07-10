@@ -33,7 +33,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Sending on stream {}: {} bytes", i, data.len());
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             println!("Stream {} complete", i);
-            Ok::<(), Box<dyn std::error::Error>>(())
         });
 
         tasks.push(task);
@@ -41,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Wait for all streams to complete
     for task in tasks {
-        task.await??;
+        task.await?;
     }
 
     println!("All streams completed");

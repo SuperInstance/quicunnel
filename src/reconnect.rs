@@ -209,4 +209,36 @@ mod tests {
         assert_eq!(manager.attempts, 0);
         assert_eq!(manager.current_delay, Duration::from_secs(1));
     }
+
+    #[tokio::test]
+    async fn test_give_up_boundary_and_attempt_counter() {
+        // wait_for_retry() must return true exactly `max_attempts` times and then
+        // start returning false; attempts() must track the count precisely.
+        let mut manager = ReconnectManager::new(ReconnectConfig {
+            initial_delay: Duration::from_millis(0),
+            max_delay: Duration::from_millis(0),
+            max_attempts: 3,
+            backoff_multiplier: 2.0,
+        });
+
+        assert!(manager.wait_for_retry().await);
+        assert!(manager.wait_for_retry().await);
+        assert!(manager.wait_for_retry().await);
+        assert_eq!(manager.attempts(), 3);
+
+        // One beyond the limit must signal give-up without bumping the counter.
+        assert!(!manager.wait_for_retry().await);
+        assert_eq!(manager.attempts(), 3);
+    }
+
+    #[test]
+    fn test_default_config_values() {
+        // The defaults are part of the public contract documented in the README
+        // (1s initial, 60s cap, 10 attempts, 2x backoff).
+        let cfg = ReconnectConfig::default();
+        assert_eq!(cfg.initial_delay, Duration::from_secs(1));
+        assert_eq!(cfg.max_delay, Duration::from_secs(60));
+        assert_eq!(cfg.max_attempts, 10);
+        assert_eq!(cfg.backoff_multiplier, 2.0);
+    }
 }

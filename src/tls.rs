@@ -189,4 +189,22 @@ mod tests {
             _ => panic!("Expected Certificate error"),
         }
     }
+
+    #[test]
+    fn test_distinct_clients_get_distinct_certs() {
+        // The client_id is embedded in the certificate (CN + SAN DNS name), so
+        // distinct ids must yield distinct DER encodings.
+        let (cert_a, _) = generate_device_certificate("client-a").unwrap();
+        let (cert_b, _) = generate_device_certificate("client-b").unwrap();
+        assert_ne!(cert_a.as_ref(), cert_b.as_ref());
+
+        // Re-generating the same id twice still produces different output because
+        // a fresh key pair is minted each time (sanity check that we are not
+        // accidentally returning cached/static material).
+        let (c1, k1) = generate_device_certificate("same-id").unwrap();
+        let (c2, k2) = generate_device_certificate("same-id").unwrap();
+        assert_ne!(k1.secret_der(), k2.secret_der());
+        // The certs differ too (different key -> different SPKI).
+        assert_ne!(c1.as_ref(), c2.as_ref());
+    }
 }

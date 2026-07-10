@@ -183,4 +183,42 @@ mod tests {
         assert_eq!(stats.heartbeats_sent, 1);
         assert_eq!(stats.success_rate(), 1.0);
     }
+
+    #[test]
+    fn test_success_rate_with_failures() {
+        // success_rate() is defined as succeeded/sent; partial success and the
+        // zero-requests edge case both matter for callers reading stats.
+        let stats = TunnelStats {
+            requests_sent: 4,
+            requests_succeeded: 3,
+            ..Default::default()
+        };
+        assert_eq!(stats.success_rate(), 0.75);
+
+        // No requests yet -> treat as "fully successful" (no observed failures).
+        let empty = TunnelStats::default();
+        assert_eq!(empty.success_rate(), 1.0);
+    }
+
+    #[test]
+    fn test_state_health_helpers() {
+        // is_healthy() treats latency >= 500ms as unhealthy.
+        let healthy = TunnelState::Connected {
+            since: Instant::now(),
+            latency_ms: 100,
+        };
+        assert!(healthy.is_connected());
+        assert!(healthy.is_healthy());
+
+        let laggy = TunnelState::Connected {
+            since: Instant::now(),
+            latency_ms: 600,
+        };
+        assert!(laggy.is_connected());
+        assert!(!laggy.is_healthy());
+
+        // Non-connected states are neither connected nor healthy.
+        assert!(!TunnelState::Disconnected.is_connected());
+        assert!(!TunnelState::Disconnected.is_healthy());
+    }
 }

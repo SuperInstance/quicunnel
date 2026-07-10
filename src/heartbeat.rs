@@ -175,4 +175,32 @@ mod tests {
         let service = HeartbeatService::new(HeartbeatConfig::default());
         assert_eq!(service.sequence.load(Ordering::SeqCst), 0);
     }
+
+    #[tokio::test]
+    async fn test_shutdown_terminates_spawned_task() {
+        // The shutdown broadcast channel must actually stop the heartbeat loop.
+        // If shutdown() doesn't propagate, the JoinHandle never resolves and the
+        // timeout fires.
+        let service = HeartbeatService::new(HeartbeatConfig {
+            interval: Duration::from_millis(10),
+            ..Default::default()
+        });
+        let handle = service.spawn();
+        service.shutdown();
+
+        let result = tokio::time::timeout(Duration::from_millis(500), handle).await;
+        assert!(
+            result.is_ok(),
+            "heartbeat task did not shut down within 500ms"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clear_connection_without_prior_set_is_safe() {
+        // clear_connection() on a service that never had a connection must not
+        // panic (it is called unconditionally from Tunnel::disconnect).
+        let service = HeartbeatService::new(HeartbeatConfig::default());
+        service.clear_connection().await;
+        service.shutdown();
+    }
 }

@@ -35,7 +35,7 @@ quinn = "0.11"
 rustls = "0.23"
 rustls-pemfile = "1.0"
 webpki-roots = "0.26"
-rcgen = "0.11"
+rcgen = "0.14"
 
 # For data structures
 bytes = "1.5"

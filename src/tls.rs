@@ -120,10 +120,10 @@ fn read_first_key(key_path: &Path) -> Result<Vec<u8>> {
 pub fn generate_device_certificate(
     client_id: &str,
 ) -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>)> {
-    use rcgen::{Certificate as RcgenCert, CertificateParams, DnType, KeyPair, SanType};
+    use rcgen::{CertificateParams, DnType, KeyPair, SanType};
 
-    // Generate key pair
-    let key_pair = KeyPair::generate(&rcgen::PKCS_ECDSA_P256_SHA256)
+    // Generate key pair (defaults to PKCS_ECDSA_P256_SHA256)
+    let key_pair = KeyPair::generate()
         .map_err(|e| QuicunnelError::certificate(format!("Failed to generate key pair: {}", e)))?;
 
     // Build certificate parameters
@@ -136,30 +136,25 @@ pub fn generate_device_certificate(
         .push(DnType::OrganizationName, "Quicunnel");
     params.not_before = time::OffsetDateTime::now_utc();
     params.not_after = time::OffsetDateTime::now_utc() + time::Duration::days(365);
-    params.key_pair = Some(key_pair);
 
     // Subject alternative name (DNS name for client)
-    params.subject_alt_names = vec![SanType::DnsName(format!(
-        "{}.client.quicunnel.local",
-        client_id
-    ))];
+    params.subject_alt_names = vec![SanType::DnsName(
+        format!("{}.client.quicunnel.local", client_id)
+            .try_into()
+            .map_err(|e| QuicunnelError::certificate(format!("Invalid subject alt name: {}", e)))?,
+    )];
 
     // Extended key usage for client auth
     params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
 
-    let cert = RcgenCert::from_params(params).map_err(|e| {
+    let cert = params.self_signed(&key_pair).map_err(|e| {
         QuicunnelError::certificate(format!("Failed to generate certificate: {}", e))
     })?;
 
-    let cert_der = cert.serialize_der().map_err(|e| {
-        QuicunnelError::certificate(format!("Failed to serialize certificate: {}", e))
-    })?;
-    let key_der = cert.serialize_private_key_der();
+    let cert_der = cert.der().clone();
+    let key = PrivateKeyDer::Pkcs8(key_pair.serialize_der().into());
 
-    let key = PrivateKeyDer::try_from(key_der)
-        .map_err(|e| QuicunnelError::certificate(format!("Failed to decode private key: {}", e)))?;
-
-    Ok((CertificateDer::from(cert_der), key))
+    Ok((cert_der, key))
 }
 
 #[cfg(test)]

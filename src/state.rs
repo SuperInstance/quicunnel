@@ -64,8 +64,10 @@ impl ConnectionStateMachine {
             (TunnelState::Connected { .. }, TunnelState::Reconnecting { .. }) => true,
             (TunnelState::Connected { .. }, TunnelState::Disconnected) => true,
             (TunnelState::Reconnecting { .. }, TunnelState::Connected { .. }) => true,
-            (TunnelState::Reconnecting { attempt: a1, .. }, TunnelState::Reconnecting { attempt: a2, .. })
-                if *a2 == *a1 + 1 => true,
+            (
+                TunnelState::Reconnecting { attempt: a1, .. },
+                TunnelState::Reconnecting { attempt: a2, .. },
+            ) if *a2 == *a1 + 1 => true,
             (TunnelState::Reconnecting { .. }, TunnelState::Failed { .. }) => true,
             (TunnelState::Failed { .. }, TunnelState::Connecting { .. }) => true,
             (TunnelState::Disconnected, TunnelState::Disconnected) => true,
@@ -193,6 +195,9 @@ mod tests {
         });
 
         // Subscriber should see new state
-        assert!(matches!(*rx.borrow_and_update(), TunnelState::Connecting { .. }));
+        assert!(matches!(
+            *rx.borrow_and_update(),
+            TunnelState::Connecting { .. }
+        ));
     }
 }

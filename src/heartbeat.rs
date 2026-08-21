@@ -115,24 +115,38 @@ impl HeartbeatService {
             .map_err(|e| crate::error::QuicunnelError::Serialization(e.to_string()))?;
 
         // Send on unidirectional stream
-        let mut send = conn.open_uni().await
-            .map_err(|e| crate::error::QuicunnelError::tunnel_connection(format!("Failed to open stream: {}", e)))?;
+        let mut send = conn.open_uni().await.map_err(|e| {
+            crate::error::QuicunnelError::tunnel_connection(format!("Failed to open stream: {}", e))
+        })?;
 
         // Message type: Heartbeat (0x01)
-        send.write_all(&[0x01]).await
-            .map_err(|e| crate::error::QuicunnelError::tunnel_connection(format!("Failed to write type: {}", e)))?;
+        send.write_all(&[0x01]).await.map_err(|e| {
+            crate::error::QuicunnelError::tunnel_connection(format!("Failed to write type: {}", e))
+        })?;
 
         // Length (4 bytes big-endian)
         let len = data.len() as u32;
-        send.write_all(&len.to_be_bytes()).await
-            .map_err(|e| crate::error::QuicunnelError::tunnel_connection(format!("Failed to write length: {}", e)))?;
+        send.write_all(&len.to_be_bytes()).await.map_err(|e| {
+            crate::error::QuicunnelError::tunnel_connection(format!(
+                "Failed to write length: {}",
+                e
+            ))
+        })?;
 
         // Payload
-        send.write_all(&data).await
-            .map_err(|e| crate::error::QuicunnelError::tunnel_connection(format!("Failed to write payload: {}", e)))?;
+        send.write_all(&data).await.map_err(|e| {
+            crate::error::QuicunnelError::tunnel_connection(format!(
+                "Failed to write payload: {}",
+                e
+            ))
+        })?;
 
-        send.finish().await
-            .map_err(|e| crate::error::QuicunnelError::tunnel_connection(format!("Failed to finish stream: {}", e)))?;
+        send.finish().map_err(|e| {
+            crate::error::QuicunnelError::tunnel_connection(format!(
+                "Failed to finish stream: {}",
+                e
+            ))
+        })?;
 
         tracing::trace!("Heartbeat sent: seq={}", sequence);
 
@@ -160,5 +174,33 @@ mod tests {
     fn test_heartbeat_service_creation() {
         let service = HeartbeatService::new(HeartbeatConfig::default());
         assert_eq!(service.sequence.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_terminates_spawned_task() {
+        // The shutdown broadcast channel must actually stop the heartbeat loop.
+        // If shutdown() doesn't propagate, the JoinHandle never resolves and the
+        // timeout fires.
+        let service = HeartbeatService::new(HeartbeatConfig {
+            interval: Duration::from_millis(10),
+            ..Default::default()
+        });
+        let handle = service.spawn();
+        service.shutdown();
+
+        let result = tokio::time::timeout(Duration::from_millis(500), handle).await;
+        assert!(
+            result.is_ok(),
+            "heartbeat task did not shut down within 500ms"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clear_connection_without_prior_set_is_safe() {
+        // clear_connection() on a service that never had a connection must not
+        // panic (it is called unconditionally from Tunnel::disconnect).
+        let service = HeartbeatService::new(HeartbeatConfig::default());
+        service.clear_connection().await;
+        service.shutdown();
     }
 }

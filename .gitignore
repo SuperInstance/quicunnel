@@ -1,0 +1,13 @@
+# Rust build artifacts
+/target
+
+# Cargo lockfile (library crate: Cargo.lock is not committed by convention;
+# consumers regenerate it on build). If this crate ever ships a binary target,
+# remove this line and track Cargo.lock instead.
+Cargo.lock
+
+# rustfmt backup files
+**/*.rs.bk
+
+# Debug / profiler output
+*.pdb

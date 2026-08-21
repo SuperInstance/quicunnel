@@ -54,6 +54,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Generate lockfile for audit (Cargo.lock is gitignored for this library crate)
+        run: cargo generate-lockfile
+
       - name: Run cargo-audit
         uses: rustsec/audit-check@v2
         with:

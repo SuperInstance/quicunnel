@@ -5,6 +5,12 @@ A **library** crate (no binary) that builds a QUIC client tunnel on top of
 with mutual-TLS client authentication, a validated connection-state machine,
 and a heartbeat sender.
 
+<p align="center">
+  <img src="assets/images/hero.jpg" width="680" alt="A brass signal lamp sending one unbroken amber beam across a midnight-blue void toward a distant answering light — the encrypted passage itself.">
+</p>
+
+*One lamp, one beam, one answering light: the tunnel is the beam, not the lamp.*
+
 This is **not** a turnkey tunnel product: it is a client-side library, it does
 **not** ship a server, and several "reliability" features exist as tested
 components but are not yet wired into the main `Tunnel` lifecycle. The
@@ -131,11 +137,18 @@ errors: QuicunnelError                     (src/error.rs)
 **Connection lifecycle** (state transitions that are actually *allowed* by the
 machine; anything else is rejected and logged):
 
-```
-Disconnected ──▶ Connecting ──▶ Connected ──▶ Reconnecting(n) ──▶ Connected
-                     │               │              │
-                     └──▶ Failed ◀───┘              ├──▶ Reconnecting(n+1)
-                                              └──▶ Failed ──▶ Connecting
+```mermaid
+stateDiagram-v2
+    [*] --> Disconnected
+    Disconnected --> Connecting
+    Connecting --> Connected
+    Connecting --> Failed
+    Connected --> Failed
+    Connected --> Reconnecting
+    Reconnecting --> Connected
+    Reconnecting --> Reconnecting2: retry n+1
+    Reconnecting --> Failed
+    Failed --> Connecting
 ```
 
 ## Configuration
